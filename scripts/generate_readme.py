@@ -10,6 +10,7 @@ in reverse chronological order.
 import os
 import re
 from datetime import datetime
+from pathlib import Path
 from typing import List, Dict, Set
 from googleapiclient.discovery import build
 from dateutil import parser as date_parser
@@ -18,7 +19,7 @@ from dateutil import parser as date_parser
 YOUTUBE_CHANNEL_ID = "UC7sDT8jZ76VLV1u__krUutA"  # @watchdust channel ID
 YOUTUBE_CHANNEL_URL = "https://www.youtube.com/@watchdust"
 MAX_RESULTS = 50  # Number of videos to fetch per request
-TOTAL_VIDEOS = 200  # Total videos to fetch
+TOTAL_VIDEOS = int(os.environ.get("MAX_VIDEOS", "200"))  # Total videos to fetch (configurable)
 
 
 def get_youtube_service():
@@ -167,7 +168,8 @@ Episodes are listed in reverse chronological order (newest first).
         # Get first 150 characters of description
         desc = video["description"]
         if len(desc) > 150:
-            desc = desc[:150].rsplit(' ', 1)[0] + "..."
+            parts = desc[:150].rsplit(' ', 1)
+            desc = (parts[0] if len(parts) > 1 else desc[:150]) + "..."
         
         readme += f"### {idx}. [{title}]({url})\n"
         readme += f"**Published:** {date}\n\n"
@@ -206,10 +208,9 @@ def main():
         
         readme_content = generate_readme(unique_videos)
         
-        readme_path = os.path.join(
-            os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-            "README.md"
-        )
+        # Get project root directory (parent of scripts directory)
+        project_root = Path(__file__).parent.parent
+        readme_path = project_root / "README.md"
         
         with open(readme_path, 'w', encoding='utf-8') as f:
             f.write(readme_content)
