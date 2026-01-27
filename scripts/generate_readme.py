@@ -101,10 +101,14 @@ def fetch_videos(youtube) -> List[Dict]:
         )
         response = request.execute()
         
-        items_in_page = len(response.get("items", []))
-        print(f"Fetched {items_in_page} videos (total so far: {len(videos) + items_in_page})")
+        items_in_response = response.get("items", [])
+        if not items_in_response:
+            print("No more items in response")
+            break
         
-        for item in response.get("items", []):
+        videos_before = len(videos)
+        
+        for item in items_in_response:
             snippet = item.get("snippet", {})
             
             # Skip items with missing required fields
@@ -114,6 +118,12 @@ def fetch_videos(youtube) -> List[Dict]:
                 print(f"Warning: Skipping item with missing video ID")
                 continue
             
+            # Skip items with missing published date (required for sorting and display)
+            published_at = snippet.get("publishedAt")
+            if not published_at:
+                print(f"Warning: Skipping video {video_id} with missing published date")
+                continue
+            
             # Get thumbnail URL with fallback
             thumbnails = snippet.get("thumbnails", {})
             default_thumb = thumbnails.get("default", {})
@@ -121,12 +131,15 @@ def fetch_videos(youtube) -> List[Dict]:
             
             videos.append({
                 "id": video_id,
-                "title": snippet.get("title", ""),
+                "title": snippet.get("title", "Untitled"),
                 "description": snippet.get("description", ""),
-                "published_at": snippet.get("publishedAt", ""),
+                "published_at": published_at,
                 "url": f"https://www.youtube.com/watch?v={video_id}",
                 "thumbnail": thumbnail_url
             })
+        
+        videos_added = len(videos) - videos_before
+        print(f"Fetched {len(items_in_response)} items, added {videos_added} valid videos (total so far: {len(videos)})")
         
         next_page_token = response.get("nextPageToken")
         if not next_page_token:
