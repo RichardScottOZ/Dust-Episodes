@@ -2,9 +2,15 @@
 """
 Generate README with DUST YouTube episodes.
 
-This script fetches videos from the DUST YouTube channel (@watchdust),
+This script fetches ALL videos from the DUST YouTube channel (@watchdust),
 filters out reruns/duplicates, and generates a README with unique episodes
 in reverse chronological order.
+
+The script uses YouTube's playlistItems API to reliably paginate through
+all videos in the channel's uploads playlist until no more episodes are available.
+
+An optional MAX_VIDEOS environment variable can be set to limit the number of
+videos fetched for testing purposes (default: unlimited).
 """
 
 import os
@@ -19,7 +25,11 @@ from dateutil import parser as date_parser
 YOUTUBE_CHANNEL_ID = "UC7sDT8jZ76VLV1u__krUutA"  # @watchdust channel ID
 YOUTUBE_CHANNEL_URL = "https://www.youtube.com/@watchdust"
 MAX_RESULTS = 50  # Number of videos to fetch per request
-TOTAL_VIDEOS = int(os.environ.get("MAX_VIDEOS", "200"))  # Total videos to fetch (configurable)
+
+# Optional limit for testing purposes. Set to None to fetch all episodes (default).
+# Can be overridden with MAX_VIDEOS environment variable (e.g., MAX_VIDEOS=100)
+MAX_VIDEOS_ENV = os.environ.get("MAX_VIDEOS")
+TOTAL_VIDEOS = int(MAX_VIDEOS_ENV) if MAX_VIDEOS_ENV else None
 
 
 def get_youtube_service():
@@ -60,38 +70,106 @@ def normalize_title(title: str) -> str:
     return title
 
 
+def get_uploads_playlist_id(youtube, channel_id: str) -> str:
+    """Get the uploads playlist ID for a channel."""
+    request = youtube.channels().list(
+        part="contentDetails",
+        id=channel_id
+    )
+    response = request.execute()
+    
+    if not response.get("items"):
+        raise ValueError(f"Channel {channel_id} not found")
+    
+    try:
+        uploads_playlist_id = response["items"][0]["contentDetails"]["relatedPlaylists"]["uploads"]
+    except (KeyError, IndexError) as e:
+        raise ValueError(f"Unable to get uploads playlist ID for channel {channel_id}: {e}")
+    
+    return uploads_playlist_id
+
+
 def fetch_videos(youtube) -> List[Dict]:
-    """Fetch videos from DUST YouTube channel."""
+    """Fetch videos from DUST YouTube channel using uploads playlist.
+    
+    Fetches all available videos unless TOTAL_VIDEOS is set to limit for testing.
+    """
     videos = []
     next_page_token = None
     
-    while len(videos) < TOTAL_VIDEOS:
-        # Search for videos in the channel
-        request = youtube.search().list(
-            part="id,snippet",
-            channelId=YOUTUBE_CHANNEL_ID,
-            maxResults=min(MAX_RESULTS, TOTAL_VIDEOS - len(videos)),
-            order="date",  # Most recent first
-            type="video",
+    # Get the channel's uploads playlist ID
+    uploads_playlist_id = get_uploads_playlist_id(youtube, YOUTUBE_CHANNEL_ID)
+    print(f"Uploads playlist ID: {uploads_playlist_id}")
+    
+    if TOTAL_VIDEOS:
+        print(f"Fetching up to {TOTAL_VIDEOS} videos (limited by MAX_VIDEOS env var)")
+    else:
+        print("Fetching all available videos")
+    
+    while True:
+        # Stop if we've reached the optional limit
+        if TOTAL_VIDEOS and len(videos) >= TOTAL_VIDEOS:
+            print(f"Reached limit of {TOTAL_VIDEOS} videos")
+            break
+        
+        # Calculate how many results to request
+        if TOTAL_VIDEOS:
+            max_results_this_request = min(MAX_RESULTS, TOTAL_VIDEOS - len(videos))
+        else:
+            max_results_this_request = MAX_RESULTS
+        
+        # Fetch videos from the uploads playlist
+        request = youtube.playlistItems().list(
+            part="snippet",
+            playlistId=uploads_playlist_id,
+            maxResults=max_results_this_request,
             pageToken=next_page_token
         )
         response = request.execute()
         
-        for item in response.get("items", []):
-            video_id = item["id"]["videoId"]
-            snippet = item["snippet"]
+        items_in_response = response.get("items", [])
+        if not items_in_response:
+            print("No more items in response")
+            break
+        
+        videos_before = len(videos)
+        
+        for item in items_in_response:
+            snippet = item.get("snippet", {})
+            
+            # Skip items with missing required fields
+            resource_id = snippet.get("resourceId", {})
+            video_id = resource_id.get("videoId")
+            if not video_id:
+                print(f"Warning: Skipping item with missing video ID")
+                continue
+            
+            # Skip items with missing published date (required for sorting and display)
+            published_at = snippet.get("publishedAt")
+            if not published_at:
+                print(f"Warning: Skipping video {video_id} with missing published date")
+                continue
+            
+            # Get thumbnail URL with fallback
+            thumbnails = snippet.get("thumbnails", {})
+            default_thumb = thumbnails.get("default", {})
+            thumbnail_url = default_thumb.get("url", "")
             
             videos.append({
                 "id": video_id,
-                "title": snippet["title"],
-                "description": snippet["description"],
-                "published_at": snippet["publishedAt"],
+                "title": snippet.get("title", "Untitled"),
+                "description": snippet.get("description", ""),
+                "published_at": published_at,
                 "url": f"https://www.youtube.com/watch?v={video_id}",
-                "thumbnail": snippet["thumbnails"]["default"]["url"]
+                "thumbnail": thumbnail_url
             })
+        
+        videos_added = len(videos) - videos_before
+        print(f"Fetched {len(items_in_response)} items, added {videos_added} valid videos (total so far: {len(videos)})")
         
         next_page_token = response.get("nextPageToken")
         if not next_page_token:
+            print("No more pages available")
             break
     
     return videos
