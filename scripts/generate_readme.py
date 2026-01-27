@@ -74,7 +74,11 @@ def get_uploads_playlist_id(youtube, channel_id: str) -> str:
     if not response.get("items"):
         raise ValueError(f"Channel {channel_id} not found")
     
-    uploads_playlist_id = response["items"][0]["contentDetails"]["relatedPlaylists"]["uploads"]
+    try:
+        uploads_playlist_id = response["items"][0]["contentDetails"]["relatedPlaylists"]["uploads"]
+    except (KeyError, IndexError) as e:
+        raise ValueError(f"Unable to get uploads playlist ID for channel {channel_id}: {e}")
+    
     return uploads_playlist_id
 
 
@@ -101,16 +105,27 @@ def fetch_videos(youtube) -> List[Dict]:
         print(f"Fetched {items_in_page} videos (total so far: {len(videos) + items_in_page})")
         
         for item in response.get("items", []):
-            snippet = item["snippet"]
-            video_id = snippet["resourceId"]["videoId"]
+            snippet = item.get("snippet", {})
+            
+            # Skip items with missing required fields
+            resource_id = snippet.get("resourceId", {})
+            video_id = resource_id.get("videoId")
+            if not video_id:
+                print(f"Warning: Skipping item with missing video ID")
+                continue
+            
+            # Get thumbnail URL with fallback
+            thumbnails = snippet.get("thumbnails", {})
+            default_thumb = thumbnails.get("default", {})
+            thumbnail_url = default_thumb.get("url", "")
             
             videos.append({
                 "id": video_id,
-                "title": snippet["title"],
-                "description": snippet["description"],
-                "published_at": snippet["publishedAt"],
+                "title": snippet.get("title", ""),
+                "description": snippet.get("description", ""),
+                "published_at": snippet.get("publishedAt", ""),
                 "url": f"https://www.youtube.com/watch?v={video_id}",
-                "thumbnail": snippet["thumbnails"]["default"]["url"]
+                "thumbnail": thumbnail_url
             })
         
         next_page_token = response.get("nextPageToken")
