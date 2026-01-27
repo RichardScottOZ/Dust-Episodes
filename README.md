@@ -4,11 +4,20 @@ This is an automatically generated list of unique sci-fi short film episodes fro
 
 > **About DUST:** DUST presents thought-provoking science fiction content, showcasing the visions of the world's most talented sci-fi creators.
 
+## ⚠️ Setup Required
+
+**This repository requires a YouTube API key to function.** The workflow will fail until you configure the `YOUTUBE_API_KEY` secret in your repository settings.
+
+📖 **[See SETUP.md for complete setup instructions](SETUP.md)**
+
+Quick setup:
+1. Get a YouTube Data API v3 key from [Google Cloud Console](https://console.cloud.google.com/)
+2. Add it as a repository secret: `Settings` → `Secrets and variables` → `Actions` → `New repository secret`
+3. Name: `YOUTUBE_API_KEY`, Value: your API key
+
 ## Summary
 
 *This README will be automatically updated weekly with the latest DUST episodes.*
-
-**Setup Required:** To enable automatic updates, please follow the instructions in [SETUP.md](SETUP.md) to configure the YouTube API key.
 
 ---
 

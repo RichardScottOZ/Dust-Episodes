@@ -26,7 +26,13 @@ def get_youtube_service():
     """Initialize and return YouTube API service."""
     api_key = os.environ.get("YOUTUBE_API_KEY")
     if not api_key:
-        raise ValueError("YOUTUBE_API_KEY environment variable not set")
+        raise ValueError(
+            "YOUTUBE_API_KEY environment variable not set.\n"
+            "Please follow the setup instructions in SETUP.md to:\n"
+            "1. Get a YouTube Data API key from Google Cloud Console\n"
+            "2. Add it as a GitHub repository secret named 'YOUTUBE_API_KEY'\n"
+            "For local testing: export YOUTUBE_API_KEY='your-api-key-here'"
+        )
     return build("youtube", "v3", developerKey=api_key)
 
 

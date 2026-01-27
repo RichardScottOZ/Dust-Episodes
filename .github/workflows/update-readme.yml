@@ -26,6 +26,24 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
+      - name: Check YOUTUBE_API_KEY secret
+        env:
+          YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
+        run: |
+          if [ -z "$YOUTUBE_API_KEY" ]; then
+            echo "❌ ERROR: YOUTUBE_API_KEY secret is not configured!"
+            echo ""
+            echo "Please follow these steps to fix this:"
+            echo "1. Go to: https://github.com/${{ github.repository }}/settings/secrets/actions"
+            echo "2. Click 'New repository secret'"
+            echo "3. Name: YOUTUBE_API_KEY"
+            echo "4. Value: Your YouTube Data API v3 key"
+            echo ""
+            echo "See SETUP.md for detailed instructions on getting a YouTube API key."
+            exit 1
+          fi
+          echo "✅ YOUTUBE_API_KEY secret is configured"
+
       - name: Generate README
         env:
           YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
