@@ -5,6 +5,9 @@ Generate README with DUST YouTube episodes.
 This script fetches videos from the DUST YouTube channel (@watchdust),
 filters out reruns/duplicates, and generates a README with unique episodes
 in reverse chronological order.
+
+The script uses YouTube's playlistItems API to reliably paginate through
+all videos in the channel's uploads playlist, ensuring all episodes are fetched.
 """
 
 import os
@@ -60,26 +63,46 @@ def normalize_title(title: str) -> str:
     return title
 
 
+def get_uploads_playlist_id(youtube, channel_id: str) -> str:
+    """Get the uploads playlist ID for a channel."""
+    request = youtube.channels().list(
+        part="contentDetails",
+        id=channel_id
+    )
+    response = request.execute()
+    
+    if not response.get("items"):
+        raise ValueError(f"Channel {channel_id} not found")
+    
+    uploads_playlist_id = response["items"][0]["contentDetails"]["relatedPlaylists"]["uploads"]
+    return uploads_playlist_id
+
+
 def fetch_videos(youtube) -> List[Dict]:
-    """Fetch videos from DUST YouTube channel."""
+    """Fetch videos from DUST YouTube channel using uploads playlist."""
     videos = []
     next_page_token = None
     
+    # Get the channel's uploads playlist ID
+    uploads_playlist_id = get_uploads_playlist_id(youtube, YOUTUBE_CHANNEL_ID)
+    print(f"Uploads playlist ID: {uploads_playlist_id}")
+    
     while len(videos) < TOTAL_VIDEOS:
-        # Search for videos in the channel
-        request = youtube.search().list(
-            part="id,snippet",
-            channelId=YOUTUBE_CHANNEL_ID,
+        # Fetch videos from the uploads playlist
+        request = youtube.playlistItems().list(
+            part="snippet",
+            playlistId=uploads_playlist_id,
             maxResults=min(MAX_RESULTS, TOTAL_VIDEOS - len(videos)),
-            order="date",  # Most recent first
-            type="video",
             pageToken=next_page_token
         )
         response = request.execute()
         
+        items_in_page = len(response.get("items", []))
+        print(f"Fetched {items_in_page} videos (total so far: {len(videos) + items_in_page})")
+        
         for item in response.get("items", []):
-            video_id = item["id"]["videoId"]
             snippet = item["snippet"]
+            video_id = snippet["resourceId"]["videoId"]
             
             videos.append({
                 "id": video_id,
@@ -92,6 +115,7 @@ def fetch_videos(youtube) -> List[Dict]:
         
         next_page_token = response.get("nextPageToken")
         if not next_page_token:
+            print("No more pages available")
             break
     
     return videos
